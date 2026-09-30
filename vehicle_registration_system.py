@@ -1,414 +1,322 @@
 import hashlib
-import time
 
-# BLOCK CLASS
-class Block:
-    def __init__(self, index, voter_id, vote, previous_hash):
-        self.index = index
-        self.timestamp = time.time()
-        self.voter_id = voter_id
-        self.vote = vote
-        self.previous_hash = previous_hash
-        self.hash = self.calculate_hash()
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes
+from cryptography.exceptions import InvalidSignature
 
-    def calculate_hash(self):
-        value = (
-            str(self.index)
-            + str(self.timestamp)
-            + str(self.voter_id)
-            + str(self.vote)
-            + str(self.previous_hash)
+
+# ============================================================
+# GLOBAL DATA
+# ============================================================
+
+vehicles = {}
+
+private_key = None
+public_key = None
+
+last_message = None
+last_signature = None
+
+
+# ============================================================
+# SHA-256 HASHING
+# ============================================================
+
+def generate_sha256():
+
+    print("\n" + "=" * 60)
+    print("SHA-256 HASH".center(60))
+    print("=" * 60)
+
+    message = input("Enter a message: ")
+
+    if not message.strip():
+        print("\n❌ Message cannot be empty.")
+        return
+
+    sha256_hash = hashlib.sha256(message.encode()).hexdigest()
+
+    print("\nOriginal Message:")
+    print(message)
+
+    print("\nSHA-256 Hash:")
+    print(sha256_hash)
+
+
+# ============================================================
+# GENERATE RSA KEY PAIR
+# ============================================================
+
+def generate_keys():
+
+    global private_key
+    global public_key
+
+    print("\n" + "=" * 60)
+    print("GENERATING RSA KEY PAIR".center(60))
+    print("=" * 60)
+
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048
+    )
+
+    public_key = private_key.public_key()
+
+    print("\n✅ Public-private key pair generated successfully.")
+
+    print("\nPrivate Key:")
+    print(private_key)
+
+    print("\nPublic Key:")
+    print(public_key)
+
+
+# ============================================================
+# DIGITAL SIGNATURE
+# ============================================================
+
+def sign_message():
+
+    global private_key
+    global last_message
+    global last_signature
+
+    print("\n" + "=" * 60)
+    print("DIGITAL SIGNATURE".center(60))
+    print("=" * 60)
+
+    # Generate keys automatically if they don't exist
+    if private_key is None:
+        print("\nNo key pair found.")
+        print("Generating a new RSA key pair...")
+
+        generate_keys()
+
+    message = input("\nEnter message to sign: ")
+
+    if not message.strip():
+        print("\n❌ Message cannot be empty.")
+        return
+
+    last_message = message
+
+    last_signature = private_key.sign(
+        message.encode(),
+        padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.MAX_LENGTH
+        ),
+        hashes.SHA256()
+    )
+
+    print("\n✅ Message signed successfully.")
+
+    print("\nSignature:")
+    print(last_signature.hex())
+
+
+# ============================================================
+# VERIFY DIGITAL SIGNATURE
+# ============================================================
+
+def verify_signature():
+
+    global public_key
+    global last_message
+    global last_signature
+
+    print("\n" + "=" * 60)
+    print("VERIFY DIGITAL SIGNATURE".center(60))
+    print("=" * 60)
+
+    if public_key is None:
+        print("\n❌ No public key found.")
+        print("Please generate keys and sign a message first.")
+        return
+
+    if last_signature is None or last_message is None:
+        print("\n❌ No signature found.")
+        print("Please sign a message first.")
+        return
+
+    print("\nOriginal signed message:")
+    print(last_message)
+
+    message = input(
+        "\nEnter the message again for verification: "
+    )
+
+    if not message.strip():
+        print("\n❌ Message cannot be empty.")
+        return
+
+    try:
+
+        public_key.verify(
+            last_signature,
+            message.encode(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
         )
 
-        return hashlib.sha256(value.encode()).hexdigest()
-# VOTER CLASS
-class Voter:
-    def __init__(self, voter_id, name):
-        self.voter_id = voter_id
-        self.name = name
-        self.has_voted = False
+        print("\n✅ Digital Signature is VALID.")
 
+    except InvalidSignature:
 
-# CANDIDATE CLASS
-class Candidate:
-    def __init__(self, candidate_id, name):
-        self.candidate_id = candidate_id
-        self.name = name
+        print("\n❌ Digital Signature is INVALID.")
 
 
-# BLOCKCHAIN CLASS
+# ============================================================
+# REGISTER VEHICLE
+# ============================================================
 
-class Blockchain:
+def register_vehicle():
 
-    def __init__(self):
-        self.chain = [self.create_genesis_block()]
-        self.voters = {}
-        self.candidates = {}
+    print("\n" + "=" * 60)
+    print("REGISTER VEHICLE".center(60))
+    print("=" * 60)
 
+    number_plate = input(
+        "Enter vehicle number plate: "
+    ).strip().upper()
 
-    # Create Genesis Block
-    
+    if not number_plate:
+        print("\n❌ Number plate cannot be empty.")
+        return
 
-    def create_genesis_block(self):
-        return Block(0, "GENESIS", "GENESIS", "0")
+    # Check duplicate number plate
+    if number_plate in vehicles:
+        print("\n❌ This number plate is already registered.")
+        return
 
-  
-    # Get Latest Block
-   
+    owner = input("Enter owner name: ").strip()
 
-    def get_latest_block(self):
-        return self.chain[-1]
+    if not owner:
+        print("\n❌ Owner name cannot be empty.")
+        return
 
-    
-    # Add Candidate
-    
+    model = input("Enter vehicle model: ").strip()
 
-    def add_candidate(self, candidate_id, name):
+    if not model:
+        print("\n❌ Vehicle model cannot be empty.")
+        return
 
-        if candidate_id in self.candidates:
-            print("\n❌ Candidate ID already exists.")
-            return
+    # Store vehicle information
+    vehicles[number_plate] = {
+        "owner": owner,
+        "model": model
+    }
 
-        candidate = Candidate(candidate_id, name)
-        self.candidates[candidate_id] = candidate
+    print("\n✅ Vehicle registered successfully.")
 
-        print(f"\n✅ Candidate '{name}' added successfully.")
+    print("\nVehicle Details:")
+    print("-" * 40)
+    print(f"Number Plate : {number_plate}")
+    print(f"Owner        : {owner}")
+    print(f"Model        : {model}")
 
-   
-    # Add Voter
-  
 
-    def add_voter(self, voter_id, name):
+# ============================================================
+# RETRIEVE VEHICLE
+# ============================================================
 
-        if voter_id in self.voters:
-            print("\n❌ Voter ID already exists.")
-            return
+def get_vehicle():
 
-        voter = Voter(voter_id, name)
-        self.voters[voter_id] = voter
+    print("\n" + "=" * 60)
+    print("GET VEHICLE".center(60))
+    print("=" * 60)
 
-        print(f"\n✅ Voter '{name}' added successfully.")
+    number_plate = input(
+        "Enter vehicle number plate: "
+    ).strip().upper()
 
-   
-    # Cast Vote
-    
+    if not number_plate:
+        print("\n❌ Number plate cannot be empty.")
+        return
 
-    def cast_vote(self, voter_id, candidate_id):
+    if number_plate not in vehicles:
+        print("\n❌ Vehicle not found.")
+        return
 
-        # Check voter
-        if voter_id not in self.voters:
-            print("\n❌ Voter not found.")
-            return
+    vehicle = vehicles[number_plate]
 
-        # Check candidate
-        if candidate_id not in self.candidates:
-            print("\n❌ Candidate not found.")
-            return
+    print("\n✅ Vehicle Found!")
 
-        voter = self.voters[voter_id]
+    print("\nVehicle Details:")
+    print("-" * 40)
+    print(f"Number Plate : {number_plate}")
+    print(f"Owner        : {vehicle['owner']}")
+    print(f"Model        : {vehicle['model']}")
 
-        # Prevent double voting
-        if voter.has_voted:
-            print("\n❌ This voter has already voted.")
-            return
 
-        # Get latest block
-        latest_block = self.get_latest_block()
-
-        # Create new block
-        new_block = Block(
-            len(self.chain),
-            voter_id,
-            candidate_id,
-            latest_block.hash
-        )
-
-        # Add block to blockchain
-        self.chain.append(new_block)
-
-        # Mark voter as voted
-        voter.has_voted = True
-
-        candidate_name = self.candidates[candidate_id].name
-
-        print(
-            f"\n✅ Vote cast successfully!"
-            f"\nVoter: {voter.name}"
-            f"\nCandidate: {candidate_name}"
-        )
-
-    
-    # Validate Blockchain
-    
-
-    def is_chain_valid(self):
-
-        for i in range(1, len(self.chain)):
-
-            current_block = self.chain[i]
-            previous_block = self.chain[i - 1]
-
-            # Check whether current block hash is correct
-            if current_block.hash != current_block.calculate_hash():
-                return False
-
-            # Check whether previous hash is correctly linked
-            if current_block.previous_hash != previous_block.hash:
-                return False
-
-        return True
-
-   
-    # Count Votes
-   
-
-    def count_votes(self):
-
-        results = {}
-
-        # Initialize all candidates with 0 votes
-        for candidate_id, candidate in self.candidates.items():
-            results[candidate_id] = 0
-
-        # Count votes from blockchain
-        for block in self.chain[1:]:
-            if block.vote in results:
-                results[block.vote] += 1
-
-        return results
-
-   
-    # Print Blockchain
-    
-
-    def print_blockchain(self):
-
-        print("\n" + "=" * 60)
-        print("                 BLOCKCHAIN")
-        print("=" * 60)
-
-        for block in self.chain:
-
-            print(f"\nBlock #{block.index}")
-            print("-" * 40)
-
-            print(f"Timestamp     : {block.timestamp}")
-            print(f"Voter ID      : {block.voter_id}")
-            print(f"Vote          : {block.vote}")
-            print(f"Previous Hash : {block.previous_hash}")
-            print(f"Hash          : {block.hash}")
-
-        print("\n" + "=" * 60)
-
-   
-    # Display Candidates
-    
-
-    def show_candidates(self):
-
-        if not self.candidates:
-            print("\n❌ No candidates available.")
-            return
-
-        print("\nCandidates:")
-        print("-" * 30)
-
-        for candidate_id, candidate in self.candidates.items():
-            print(
-                f"ID: {candidate_id} | "
-                f"Name: {candidate.name}"
-            )
-
-   
-    # Display Voters
-    
-
-    def show_voters(self):
-
-        if not self.voters:
-            print("\n❌ No voters registered.")
-            return
-
-        print("\nVoters:")
-        print("-" * 30)
-
-        for voter_id, voter in self.voters.items():
-
-            status = "Voted" if voter.has_voted else "Not Voted"
-
-            print(
-                f"ID: {voter_id} | "
-                f"Name: {voter.name} | "
-                f"Status: {status}"
-            )
-
-  
-    # Display Vote Results
-    
-
-    def show_results(self):
-
-        results = self.count_votes()
-
-        print("\n" + "=" * 40)
-        print("             VOTE RESULTS")
-        print("=" * 40)
-
-        for candidate_id, count in results.items():
-
-            candidate = self.candidates[candidate_id]
-
-            print(
-                f"{candidate.name} "
-                f"(ID: {candidate_id}) : {count} vote(s)"
-            )
-
-
-
-# MENU
-
+# ============================================================
+# MAIN MENU
+# ============================================================
 
 def main():
-
-    blockchain = Blockchain()
 
     while True:
 
         print("\n")
-        print("=" * 50)
-        print("       VOTING MANAGEMENT SYSTEM")
-        print("=" * 50)
+        print("=" * 60)
+        print("CRYPTOGRAPHY & VEHICLE REGISTRATION".center(60))
+        print("=" * 60)
 
-        print("1. Add Candidate")
-        print("2. Add Voter")
-        print("3. Cast Vote")
-        print("4. Print Blockchain")
-        print("5. Validate Chain")
-        print("6. Show Vote Results")
-        print("7. Show Candidates")
-        print("8. Show Voters")
-        print("9. Exit")
+        print("1. Generate SHA-256 Hash")
+        print("2. Generate Public-Private Key Pair")
+        print("3. Sign Message")
+        print("4. Verify Digital Signature")
+        print("5. Register Vehicle")
+        print("6. Get Vehicle")
+        print("7. Exit")
 
-        print("=" * 50)
+        print("=" * 60)
 
         choice = input("Enter your choice: ").strip()
 
-        
-        # Add Candidate
-      
-
+        # SHA-256
         if choice == "1":
+            generate_sha256()
 
-            candidate_id = input("Enter Candidate ID: ").strip()
-            name = input("Enter Candidate Name: ").strip()
-
-            if not candidate_id or not name:
-                print("\n❌ Candidate ID and name cannot be empty.")
-                continue
-
-            blockchain.add_candidate(candidate_id, name)
-
-        
-        # Add Voter
-       
-
+        # Generate Keys
         elif choice == "2":
+            generate_keys()
 
-            voter_id = input("Enter Voter ID: ").strip()
-            name = input("Enter Voter Name: ").strip()
-
-            if not voter_id or not name:
-                print("\n❌ Voter ID and name cannot be empty.")
-                continue
-
-            blockchain.add_voter(voter_id, name)
-
-       
-        # Cast Vote
-       
-
+        # Sign Message
         elif choice == "3":
+            sign_message()
 
-            if not blockchain.voters:
-                print("\n❌ No voters registered.")
-                continue
-
-            if not blockchain.candidates:
-                print("\n❌ No candidates registered.")
-                continue
-
-            blockchain.show_candidates()
-
-            voter_id = input("\nEnter Voter ID: ").strip()
-            candidate_id = input("Enter Candidate ID: ").strip()
-
-            blockchain.cast_vote(voter_id, candidate_id)
-
-        
-        # Print Blockchain
-        
-
+        # Verify Signature
         elif choice == "4":
+            verify_signature()
 
-            blockchain.print_blockchain()
-
-        
-        # Validate Chain
-        
-
+        # Register Vehicle
         elif choice == "5":
+            register_vehicle()
 
-            if blockchain.is_chain_valid():
-                print("\n✅ Blockchain is valid.")
-            else:
-                print("\n❌ Blockchain has been tampered with!")
-
-        
-        # Show Results
-        
-
+        # Get Vehicle
         elif choice == "6":
+            get_vehicle()
 
-            blockchain.show_results()
-
-        
-        # Show Candidates
-       
-
-        elif choice == "7":
-
-            blockchain.show_candidates()
-
-       
-        # Show Voters
-        
-
-        elif choice == "8":
-
-            blockchain.show_voters()
-
-        
         # Exit
-        
-
-        elif choice == "9":
-
-            print("\nThank you for using the Voting Management System.")
+        elif choice == "7":
+            print("\nThank you for using the system.")
             print("Goodbye! 👋")
             break
 
-        
         # Invalid Choice
-        
-
         else:
+            print("\n❌ Invalid choice.")
+            print("Please select an option from 1 to 7.")
 
-            print("\n❌ Invalid choice. Please select a valid option.")
 
-
-
+# ============================================================
 # PROGRAM START
-
+# ============================================================
 
 if __name__ == "__main__":
     main()
